@@ -92,7 +92,14 @@ class CaptureForPerception(py_trees.behaviour.Behaviour):
         capture at the next waypoint ignore the picture from this one.
         """
         # TODO(bootcamper): implement.
-        raise NotImplementedError
+        frame = self._latest_frame()
+        if frame is None:
+            self._starting_index = None
+        else:
+            self._starting_index = frame.index
+
+        self._ticks = 0
+        
 
     def update(self) -> py_trees.common.Status:
         """
@@ -102,4 +109,14 @@ class CaptureForPerception(py_trees.behaviour.Behaviour):
         we wait. The class docstring says exactly what to do.
         """
         # TODO(bootcamper): implement.
-        raise NotImplementedError
+        frame = self._latest_frame()
+        if frame is not None and frame.index != self._starting_index:
+            self._publisher.publish_image(frame)
+            self._publisher.publish_status(
+                {"phase": "capture", "frame_index": frame.index}
+            )
+            return py_trees.common.Status.SUCCESS
+        self._ticks += 1
+        if self._ticks >= self._timeout_ticks:
+            return py_trees.common.Status.FAILURE
+        return py_trees.common.Status.RUNNING

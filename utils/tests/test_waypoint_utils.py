@@ -23,15 +23,17 @@ and files with comments and blank lines in them. The rest is yours:
 Graded by ``warg run utils grade-tests``: pass on the real code, 90% branch
 coverage, and fail on every broken copy in ``grader/mutants/``.
 """
+import math
 
 import pytest
 
+from src.constants import EARTH_RADIUS_M
+from src.types import Coordinate
 from src.waypoint_utils import (
     east_north_coordinate_offset_m,
     parse_waypoints_file,
     sort_clockwise_sweep,
 )
-from src.types import Coordinate
 
 # The helper and the test below are given to you.
 
@@ -87,7 +89,97 @@ def test_parse_waypoints_file_success(tmp_path, text, expected):
     path = write_to_tmp_waypoints_file(tmp_path, text)
     assert parse_waypoints_file(path) == expected
 
+def test_parse_empty_file(tmp_path):
+    path = write_to_tmp_waypoints_file(tmp_path, "")
+    result = parse_waypoints_file(path)
+    assert result == (None, [])
+def test_parse_waypoint_missing_alt(tmp_path):
+    path = write_to_tmp_waypoints_file(
+        tmp_path,
+        "waypoints:\n  - {lat: 4, lon: 5}\n",
+    )
+    with pytest.raises(ValueError):
+        parse_waypoints_file(path)
+def test_parse_latitude_out_of_range(tmp_path):
+    path = write_to_tmp_waypoints_file(
+        tmp_path,
+        "waypoints:\n  - {lat: 91, lon: 5, alt: 10}\n",
+    )
+    with pytest.raises(ValueError):
+        parse_waypoints_file(path)
+def test_parse_nonnumeric_latitude(tmp_path):
+    path = write_to_tmp_waypoints_file(
+        tmp_path,
+        "waypoints:\n  - {lat: hello, lon: 5, alt: 10}\n",
+    )
+    with pytest.raises(ValueError):
+        parse_waypoints_file(path)
+def test_same_location_has_zero_offset():
+    east, north = east_north_coordinate_offset_m(
+        43.0, -80.0, 43.0, -80.0
+    )
+    assert east == pytest.approx(0.0, abs=1e-6)
+    assert north == pytest.approx(0.0, abs=1e-6)
+def test_one_degree_north():
+    east, north = east_north_coordinate_offset_m(
+        0.0, 0.0, 1.0, 0.0
+    )
+    assert east == pytest.approx(0.0, abs=1e-6)
+    assert north == pytest.approx(
+        EARTH_RADIUS_M * math.pi / 180,
+        abs=1e-6,
+    )
+def test_sort_clockwise_from_north():
+    north = Coordinate(1, 0, 10)
+    east = Coordinate(0, 1, 10)
+    south = Coordinate(-1, 0, 10)
+    west = Coordinate(0, -1, 10)
 
+    result = sort_clockwise_sweep([south, west, north, east])
+
+    assert result == [north, east, south, west]
+def test_sort_clockwise_from_home():
+    north = Coordinate(1, 0, 10)
+    east = Coordinate(0, 1, 10)
+    south = Coordinate(-1, 0, 10)
+    west = Coordinate(0, -1, 10)
+
+    result = sort_clockwise_sweep(
+        [south, west, north, east],
+        home=east,
+    )
+
+    assert result == [east, south, west, north]
+def test_sort_empty_waypoints():
+    assert sort_clockwise_sweep([]) == []
+
+
+def test_sort_single_waypoint():
+    waypoint = Coordinate(1, 2, 10)
+
+    assert sort_clockwise_sweep([waypoint]) == [waypoint]
+def test_parse_rejects_top_level_list(tmp_path):
+    path = write_to_tmp_waypoints_file(tmp_path, "[]")
+
+    with pytest.raises(ValueError):
+        parse_waypoints_file(path)
+def test_same_bearing_nearest_first():
+     near = Coordinate(1,0, 10)
+     far = Coordinate(2,0,10)
+     south = Coordinate(-3, 0, 10)
+
+     result = sort_clockwise_sweep([far, south, near])
+
+     assert result == [near,far,south]
+def test_east_offset_at_high_latitude():
+    east, north = east_north_coordinate_offset_m(
+        60.0, 0.0, 60.0, 1.0
+    )
+    expected_east = EARTH_RADIUS_M * math.pi / 180 * 0.5
+
+    assert east == pytest.approx(expected_east, abs= 1e-6)
+
+    assert north == pytest.approx(0.0, abs = 1e-6)
 def test_placeholder():
     # TODO(bootcamper): delete this and write real tests. It's only here so
     # linter doesn't complain about unused imports before you start.
